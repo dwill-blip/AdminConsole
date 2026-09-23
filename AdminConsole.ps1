@@ -1,30 +1,50 @@
 #requires -Version 5.1
-$ErrorActionPreference='Stop';$Root=Split-Path -Parent $MyInvocation.MyCommand.Path
-'Core','Database','UserActions','ComputerActions','ExchangeActions'|%{Import-Module "$Root\Modules\$_.psm1" -Force};Add-Type -AssemblyName System.Windows.Forms,System.Drawing,Microsoft.VisualBasic;[Windows.Forms.Application]::EnableVisualStyles()
-$c=Get-Content "$Root\Config\AppConfig.json" -Raw|ConvertFrom-Json;$db=Join-Path $Root $c.DatabasePath;Initialize-PlatformDatabase $db "$Root\Database\Migrations" "$Root\Database\Seed" $c.SeedDatabase;Sync-ReportCatalog "$Root\Reports"
-$f=New-Object Windows.Forms.Form;$f.Text="$($c.ApplicationName) v$($c.Version)";$f.Size='1320,860';$tabs=New-Object Windows.Forms.TabControl;$tabs.Dock='Fill';$f.Controls.Add($tabs)
-function T($n){$t=New-Object Windows.Forms.TabPage;$t.Text=$n;[void]$tabs.TabPages.Add($t);$t};function B($p,$t,$x,$y,$w=165){$b=New-Object Windows.Forms.Button;$b.Text=$t;$b.Location="$x,$y";$b.Size="$w,32";$p.Controls.Add($b);$b};function X($p,$x,$y,$w=250,$pass=$false){$z=New-Object Windows.Forms.TextBox;$z.Location="$x,$y";$z.Width=$w;$z.UseSystemPasswordChar=$pass;$p.Controls.Add($z);$z};function L($p,$t,$x,$y){$z=New-Object Windows.Forms.Label;$z.Text=$t;$z.Location="$x,$y";$z.AutoSize=$true;$p.Controls.Add($z)};function G($p,$x,$y,$w,$h){$g=New-Object Windows.Forms.DataGridView;$g.Location="$x,$y";$g.Size="$w,$h";$g.ReadOnly=$true;$g.AutoSizeColumnsMode='DisplayedCells';$p.Controls.Add($g);$g};function DT($d){$t=New-Object Data.DataTable;if(@($d).Count){$p=@($d[0].PSObject.Properties.Name);$p|%{[void]$t.Columns.Add($_)};foreach($o in $d){$r=$t.NewRow();$p|%{$r[$_]=[string]$o.$_};$t.Rows.Add($r)}};$t}
-$dash=T Dashboard;$off=T Offboarding;$users=T 'User Administration';$computers=T Computers;$reports=T Reports;$audit=T 'Audit Center';$fav=T 'Favorites & Views';$sched=T Scheduling;$alerts=T Alerts;$approvals=T Approvals;$rbac=T RBAC;$health=T Health;$settings=T Settings
-$log=New-Object Windows.Forms.TextBox;$log.Dock='Bottom';$log.Height=90;$log.Multiline=$true;$log.ReadOnly=$true;$f.Controls.Add($log);$log.BringToFront();function Log($m){$log.AppendText("$(Get-Date -Format s) $m`r`n")}
-function Guard($perm){if(-not(Test-Permission $perm)){throw "Access denied: $perm"}}
-function Execute($action,$target,$perm,[scriptblock]$code){try{Guard $perm;if($c.RequireApprovals -and (DB 'SELECT 1 X FROM ApprovalRules WHERE ActionName=@a AND Enabled=1' @{a=$action}) -and -not(Test-Approved $action $target)){$id=Request-Approval $action $target;if($id){Add-Audit $action $target Pending "Approval $id created" $id;[Windows.Forms.MessageBox]::Show("Approval requested. Correlation: $id",'Approval required')|Out-Null;return}};if(Confirm-AdminAction "$action for $target?"){&$code;Add-Audit $action $target Success;Log "$action succeeded"}}catch{Add-Audit $action $target Failed $_.Exception.Message;Show-AdminError $_.Exception.Message}}
-# dashboard
-L $dash User 20 20;$uid=X $dash 70 16 300;$load=B $dash 'Load User' 390 13 120;$ui=New-Object Windows.Forms.TextBox;$ui.Location='20,60';$ui.Size='700,220';$ui.Multiline=$true;$ui.ReadOnly=$true;$dash.Controls.Add($ui);$mg=G $dash 750 60 480 220;$script:HU=$null;function LoadU{$script:HU=Get-HybridUser $uid.Text;$ui.Text="AD: $([bool]$HU.AD)`r`nEntra: $([bool]$HU.Entra)`r`nName: $($HU.AD.DisplayName)$($HU.Entra.DisplayName)`r`nUPN: $($HU.AD.UserPrincipalName)$($HU.Entra.UserPrincipalName)`r`nEnabled: $($HU.AD.Enabled)`r`nDN: $($HU.AD.DistinguishedName)"};$load.Add_Click({LoadU});$mg.DataSource=DT @(Get-DashboardMetrics)
-# offboarding/user tabs
-$pw=X $off 20 20 220 $true;$acts=@(@('Reset Password','ResetPassword',{Reset-OnPremPassword $HU.AD $pw.Text $true}),@('Revoke Sessions','DisableUser',{Revoke-CloudSessions $HU.Entra}),@('Disable ActiveSync','DisableUser',{Disable-UserActiveSync $HU.Entra.UserPrincipalName}),@('Remove Devices','DisableUser',{Remove-MobilePartnerships $HU.Entra.UserPrincipalName}),@('Remove Rules','DisableUser',{Remove-InboxRules $HU.Entra.UserPrincipalName}),@('Convert Mailbox','DisableUser',{Convert-ToShared $HU.Entra.UserPrincipalName}),@('Hide GAL','DisableUser',{Hide-FromGAL $HU.Entra.UserPrincipalName}),@('Remove License','RemoveLicense',{Remove-AllUserLicenses $HU.Entra}),@('Disable AD','DisableUser',{Disable-OnPremUser $HU.AD}),@('Move Disabled OU','DisableUser',{Move-ToDisabledOU $HU.AD $c.DisabledUsersOU}));$x=20;$y=70;foreach($a in $acts){$b=B $off $a[0] $x $y;$n=$a[0];$p=$a[1];$s=$a[2];$b.Add_Click({Execute $n $HU.AD.SamAccountName $p $s}.GetNewClosure());$x+=185;if($x -gt 900){$x=20;$y+=45}};L $users 'Uses loaded dashboard user.' 20 20;$x=20;foreach($a in $acts[0,1,7,8]){$b=B $users $a[0] $x 60;$n=$a[0];$p=$a[1];$s=$a[2];$b.Add_Click({Execute $n $HU.AD.SamAccountName $p $s}.GetNewClosure());$x+=185}
-# computers
-L $computers Computer 20 20;$cn=X $computers 100 16 260;$cl=B $computers Lookup 380 13 100;$ci=New-Object Windows.Forms.TextBox;$ci.Location='20,60';$ci.Size='900,180';$ci.Multiline=$true;$computers.Controls.Add($ci);$script:HC=$null;$cl.Add_Click({$script:HC=Get-HybridComputer $cn.Text;$ci.Text="AD: $($HC.AD.DistinguishedName)`r`nEntra: $($HC.Entra.Count)"});$de=B $computers 'Delete Entra' 20 270;$da=B $computers 'Delete AD' 205 270;$db=B $computers 'Delete Both' 390 270;$de.Add_Click({Execute 'Delete Entra Device' $cn.Text DeleteDevice {Remove-EntraComputers $HC.Entra}});$da.Add_Click({Execute 'Delete AD Computer' $cn.Text DeleteDevice {Remove-ADComputerRecursive $HC.AD}});$db.Add_Click({Execute 'Delete Entra Device' $cn.Text DeleteDevice {Remove-EntraComputers $HC.Entra;Remove-ADComputerRecursive $HC.AD}})
-# reports
-$rl=New-Object Windows.Forms.ListBox;$rl.Location='15,60';$rl.Size='300,510';$rl.DisplayMember='Display';$reports.Controls.Add($rl);$rg=G $reports 330 100 880 420;$rr=B $reports Refresh 15 15 100;$run=B $reports Generate 125 15 100;$exp=B $reports Export 235 15 100;$star=B $reports Favorite 345 15 100;$rt=X $reports 330 60 180;$rn=New-Object Windows.Forms.NumericUpDown;$rn.Location='520,60';$rn.Maximum=3650;$rn.Value=90;$reports.Controls.Add($rn);$rp=New-Object Windows.Forms.ComboBox;$rp.Location='610,60';$rp.Items.AddRange(@('D7','D30','D90','D180'));$rp.SelectedItem=$c.DefaultReportPeriod;$reports.Controls.Add($rp);$rc=X $reports 740 60 180;$act=B $reports 'Row Action' 330 535 140;$script:R=@()
-function Catalog{$rl.Items.Clear();Sync-ReportCatalog "$Root\Reports";DB 'SELECT * FROM ReportCatalog WHERE Enabled=1 ORDER BY Category,Name'|%{[void]$rl.Items.Add([pscustomobject]@{Display="$($_.Category) | $($_.Name)";Name=$_.Name;ActionType=$_.ActionType;Path=$_.ReportPath})}}
-function RunR{Guard RunReport;$script:ReportFilters=@{Text=$rt.Text;Days=[int]$rn.Value;Period=$rp.SelectedItem};$script:R=@(&$rl.SelectedItem.Path);if($rc.Text){$script:R=@($R|?{($_|Out-String)-match[regex]::Escape($rc.Text)})};$rg.DataSource=DT $R;Add-Audit 'Run Report' $rl.SelectedItem.Name Success "Rows=$($R.Count)"};$rr.Add_Click({Catalog});$run.Add_Click({try{RunR}catch{Show-AdminError $_.Exception.Message}});$exp.Add_Click({try{Guard ExportReport;$d=New-Object Windows.Forms.SaveFileDialog;if($d.ShowDialog()-eq'OK'){$R|Export-Csv $d.FileName -NoTypeInformation}}catch{Show-AdminError $_.Exception.Message}});$star.Add_Click({Add-Favorite $rl.SelectedItem.Path $rl.SelectedItem.Display});$act.Add_Click({try{$o=$R[$rg.CurrentRow.Index];switch($rl.SelectedItem.ActionType){ActiveSyncDevice{Execute 'Delete ActiveSync Device' $o.Identity DeleteDevice {Ensure-EXO;Remove-MobileDevice $o.Identity -Confirm:$false;RunR}}ADUser{Execute 'Disable User' $o.SamAccountName DisableUser {Ensure-AD;Disable-ADAccount $o.SamAccountName;RunR}}EntraDevice{Execute 'Delete Entra Device' $o.ObjectId DeleteDevice {Ensure-Graph;Remove-MgDevice -DeviceId $o.ObjectId -Confirm:$false;RunR}}LicenseAssignment{Execute 'Remove License' $o.UserPrincipalName RemoveLicense {Ensure-Graph;Set-MgUserLicense -UserId $o.UserId -AddLicenses @() -RemoveLicenses @($o.SkuId)|Out-Null;RunR}}}}catch{Show-AdminError $_.Exception.Message}})
-# common grids and processors
-$ag=G $audit 15 60 1160 500;$as=X $audit 15 15 280;$ar=B $audit Refresh 310 12 100;$ar.Add_Click({$ag.DataSource=DT @(Get-AuditRows $as.Text)})
-$fg=G $fav 15 60 540 480;$vg=G $fav 575 60 600 480;$fr=B $fav Refresh 15 15 100;$fr.Add_Click({$fg.DataSource=DT @(Get-Rows Favorites);$vg.DataSource=DT @(Get-Rows SavedViews)})
-$sg=G $sched 15 60 1160 480;$sr=B $sched Refresh 15 15 100;$sj=B $sched 'Run Due Jobs' 125 15 130;$sr.Add_Click({$sg.DataSource=DT @(Get-Rows ScheduledReports)});$sj.Add_Click({Guard ManageSchedules;&"$Root\Jobs\Process-ScheduledReports.ps1" -Root $Root;$sr.PerformClick()})
-$alg=G $alerts 15 60 1160 480;$alr=B $alerts Refresh 15 15 100;$alj=B $alerts 'Run Alerts' 125 15 110;$alq=B $alerts 'Deliver Queue' 245 15 120;$alr.Add_Click({$alg.DataSource=DT @(Get-Rows Alerts)});$alj.Add_Click({Guard ManageAlerts;&"$Root\Jobs\Process-Alerts.ps1" -Root $Root;$alr.PerformClick()});$alq.Add_Click({Guard ManageAlerts;&"$Root\Jobs\Process-Notifications.ps1" -Root $Root})
-$apg=G $approvals 15 60 1160 480;$apr=B $approvals Refresh 15 15 100;$apa=B $approvals Approve 125 15 100;$apx=B $approvals Reject 235 15 100;$apr.Add_Click({$apg.DataSource=DT @(Get-Rows ApprovalRequests)});$apa.Add_Click({Guard ManageApprovals;if($apg.CurrentRow){Approve-Request $apg.CurrentRow.Cells['Id'].Value;$apr.PerformClick()}});$apx.Add_Click({Guard ManageApprovals;if($apg.CurrentRow){Reject-Request $apg.CurrentRow.Cells['Id'].Value;$apr.PerformClick()}})
-$rg1=G $rbac 15 60 450 480;$rg2=G $rbac 485 60 690 480;$rfr=B $rbac Refresh 15 15 100;$rfr.Add_Click({Guard ManageRBAC;$rg1.DataSource=DT @(Get-Rows RoleDefinitions);$rg2.DataSource=DT @(DB 'SELECT u.UserAccount,r.RoleName,u.AssignedOn FROM UserRoles u JOIN RoleDefinitions r ON r.Id=u.RoleId')})
-$hg=G $health 15 60 1160 480;$hr=B $health 'Run Health Check' 15 15 140;$hr.Add_Click({&"$Root\Jobs\Test-SystemHealth.ps1" -Root $Root;$hg.DataSource=DT @(Get-Rows SystemHealth)})
-$cv=New-Object Windows.Forms.TextBox;$cv.Location='15,15';$cv.Size='1000,480';$cv.Multiline=$true;$cv.Text=Get-Content "$Root\Config\AppConfig.json" -Raw;$settings.Controls.Add($cv);$cs=B $settings Save 15 510 100;$cs.Add_Click({$null=$cv.Text|ConvertFrom-Json;$cv.Text|Set-Content "$Root\Config\AppConfig.json"})
-Catalog;$ar.PerformClick();$fr.PerformClick();$sr.PerformClick();$alr.PerformClick();$apr.PerformClick();$hr.PerformClick();Log 'V7.2.1 ready: migrations, seed tracking, RBAC, approvals, processing engines, catalog sync, audit, and health monitoring enabled.';[void]$f.ShowDialog()
+<#
+.SYNOPSIS
+    Hybrid Administration Console (v8) - GUI entry point.
+.DESCRIPTION
+    Loads the engine (src\AdminConsole.Core), the Windows Forms UI (src\AdminConsole.UI)
+    and every plugin under plugins\, then opens the main window.
+    Start it with Start-AdminConsole.cmd, or:  powershell.exe -STA -File .\AdminConsole.ps1
+#>
+[CmdletBinding()]
+param()
+
+$ErrorActionPreference = 'Stop'
+$Root = $PSScriptRoot
+
+# Files extracted from a downloaded zip are marked "from the internet"; Windows then
+# refuses to load the bundled SQLite DLL. Clear the mark on our own folder.
+if (Get-Command Unblock-File -ErrorAction SilentlyContinue) {
+    Get-ChildItem -Path $Root -Recurse -File -ErrorAction SilentlyContinue | Unblock-File -ErrorAction SilentlyContinue
+}
+
+# Windows Forms needs a single-threaded apartment.
+if ([System.Threading.Thread]::CurrentThread.GetApartmentState() -ne 'STA') {
+    $exe = (Get-Process -Id $PID).Path
+    Start-Process -FilePath $exe -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-STA', '-File', "`"$PSCommandPath`"")
+    return
+}
+
+try {
+    Import-Module (Join-Path $Root 'src\AdminConsole.Core\AdminConsole.Core.psm1') -Force
+    Register-ConsoleFileLog -Folder (Join-Path $Root 'logs')
+    Import-Module (Join-Path $Root 'src\AdminConsole.UI\AdminConsole.UI.psm1') -Force
+    Initialize-AdminConsole -Root $Root
+    Show-AdminConsoleWindow
+}
+catch {
+    $detail = "$($_.Exception.Message)`n`n$($_.ScriptStackTrace)"
+    try {
+        $logDir = Join-Path $Root 'logs'
+        if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir -Force | Out-Null }
+        Add-Content -Path (Join-Path $logDir 'startup-errors.log') -Value "$(Get-Date -Format s)`n$detail`n"
+    }
+    catch { }
+    Add-Type -AssemblyName System.Windows.Forms
+    [void][System.Windows.Forms.MessageBox]::Show("The console could not start:`n`n$detail`n`nRun Install-Prerequisites.ps1 if a module is missing.", 'Hybrid Administration Console', 'OK', 'Error')
+    exit 1
+}
+finally {
+    if (Get-Command Close-ConsoleDatabase -ErrorAction SilentlyContinue) { Close-ConsoleDatabase }
+}

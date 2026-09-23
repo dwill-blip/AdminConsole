@@ -1,0 +1,66 @@
+{
+  "ApplicationName": "Hybrid Administration Console",
+  "DatabasePath": "data/AdminConsole.db",
+
+  "Sources": {
+    "ActiveDirectory": true,
+    "EntraID": true,
+    "ExchangeOnline": true
+  },
+
+  "RequireApprovals": false,
+  "AllowSelfApproval": false,
+  "ApprovalExpiryHours": 24,
+
+  "DisabledUsersOU": "OU=Disabled Users,DC=example,DC=com",
+  "DisabledComputersOU": "OU=Disabled Computers,DC=example,DC=com",
+
+  "ReportOutputFolder": "output/reports",
+  "DefaultReportPeriod": "D30",
+
+  "Notifications": {
+    "DropFolder": "output/notifications",
+    "WebhookUrl": ""
+  },
+
+  "Graph": {
+    "TenantId": "",
+    "ClientId": "",
+    "CertificateThumbprint": "",
+    "Scopes": [
+      "User.ReadWrite.All",
+      "Device.ReadWrite.All",
+      "Directory.ReadWrite.All",
+      "UserAuthenticationMethod.ReadWrite.All",
+      "Reports.Read.All",
+      "AuditLog.Read.All",
+      "Team.ReadBasic.All"
+    ]
+  },
+
+  "Exchange": {
+    "Organization": "",
+    "AppId": "",
+    "CertificateThumbprint": ""
+  },
+
+  "EntraConnect": {
+    "Server": "sm-adfs01",
+    "WaitSeconds": 300
+  },
+
+  "OneDriveArchive": {
+    "TeamName": "",
+    "ChannelName": "IT Infrastructure",
+    "Folder": "OneDrive Archive",
+    "WaitSeconds": 300
+  },
+
+  "SharePoint": {
+    "AdminUrl": ""
+  },
+
+  "Offboarding": {
+    "OfficeText": "Disabled"
+  }
+}
