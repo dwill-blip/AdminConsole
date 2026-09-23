@@ -1,0 +1,3 @@
+param([string]$Root=(Split-Path $PSScriptRoot -Parent))
+Import-Module "$Root\Modules\Database.psm1" -Force;$c=Get-Content "$Root\Config\AppConfig.json" -Raw|ConvertFrom-Json;Initialize-PlatformDatabase (Join-Path $Root $c.DatabasePath) "$Root\Database\Migrations" "$Root\Database\Seed" $c.SeedDatabase
+foreach($x in @(@('ActiveDirectory','ActiveDirectory'),@('Graph','Microsoft.Graph.Authentication'),@('Exchange','ExchangeOnlineManagement'),@('SQLite','PSSQLite'))){$ok=[bool](Get-Module -ListAvailable $x[1]);DB 'INSERT INTO SystemHealth(CheckedOn,Component,Status,Message) VALUES(@d,@c,@s,@m)' @{d=(Get-Date).ToString('s');c=$x[0];s=$(if($ok){'Healthy'}else{'Missing'});m=$(if($ok){'Module available'}else{"Missing $($x[1])"})}|Out-Null}
