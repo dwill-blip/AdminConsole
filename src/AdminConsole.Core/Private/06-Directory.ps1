@@ -114,7 +114,7 @@ function Get-HybridUser {
     if (Test-ConsoleSource 'ActiveDirectory') {
         try {
             Connect-ConsoleActiveDirectory
-            $props = 'DisplayName', 'UserPrincipalName', 'Enabled', 'LockedOut', 'MemberOf', 'Department', 'Title', 'Office', 'LastLogonDate', 'PasswordLastSet', 'mail', 'mobile'
+            $props = 'DisplayName', 'UserPrincipalName', 'Enabled', 'LockedOut', 'MemberOf', 'Department', 'Title', 'Office', 'LastLogonDate', 'PasswordLastSet', 'mail', 'mobile', 'Manager'
             if ($Identity -like '*@*') {
                 $f = ConvertTo-FilterLiteral $Identity
                 $ad = Get-ADUser -Filter "UserPrincipalName -eq '$f' -or mail -eq '$f'" -Properties $props -ErrorAction Stop | Select-Object -First 1
@@ -215,6 +215,7 @@ function Get-ConsoleTargetSummary {
             $out['Locked out'] = $Target.AD.LockedOut
             $out['Department'] = $Target.AD.Department
             $out['Title'] = $Target.AD.Title
+            $out['Manager'] = ConvertFrom-ConsoleDn $Target.AD.Manager
             $out['Office'] = $Target.AD.Office
             $out['Mobile'] = $Target.AD.mobile
             $out['Last logon'] = $Target.AD.LastLogonDate

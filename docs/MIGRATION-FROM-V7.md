@@ -55,7 +55,10 @@ Invoke-SqliteQuery -DataSource .\Data\HybridAdmin.db -Query 'SELECT * FROM Audit
     Export-Csv .\audit-v7.csv -NoTypeInformation
 ```
 
-Settings map as follows:
+Your v7 settings do not need to be copied by hand. Either run
+`.\Import-Settings.ps1 -Path <path to your v7 Config\AppConfig.json>`, or copy that file
+into `config\` and start the console; it is imported into
+`config\settings.local.json` once (see [SETTINGS.md](SETTINGS.md)). The names map as follows:
 
 | v7 `Config/AppConfig.json` | v8 `config/settings.json` |
 |---|---|

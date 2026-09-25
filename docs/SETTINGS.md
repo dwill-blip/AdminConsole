@@ -1,8 +1,41 @@
-# config/settings.json
+# config/settings.json and settings.local.json
+
+`config\settings.json` holds the shipped defaults and is replaced by each update.
+Put your site's values in `config\settings.local.json` instead: anything in it
+overrides `settings.json`, and it is not in git or the release zips, so pulling a new
+version never overwrites it. It only needs the settings you change, for example:
+
+```json
+{
+  "DisabledUsersOU": "OU=Disabled Users,DC=corp,DC=contoso,DC=com",
+  "DisabledComputersOU": "OU=Disabled Computers,DC=corp,DC=contoso,DC=com",
+  "Graph": { "TenantId": "contoso.onmicrosoft.com" }
+}
+```
 
 Edit the file directly, or use the **Settings** tab (needs the `ManageSettings`
-permission). The JSON is validated before it is saved. Any setting you leave out
-falls back to its default. Relative paths are resolved from the console folder.
+permission), which saves to `settings.local.json`. The JSON is validated before it is
+saved. Any setting you leave out falls back to its default. Relative paths are
+resolved from the console folder.
+
+## Importing an earlier settings file
+
+To bring over the values from an earlier install, either click **Import...** on the
+Settings tab, or run:
+
+```powershell
+.\Import-Settings.ps1 -Path 'C:\Old\AdminConsole\config\settings.json'
+```
+
+It accepts a v8 `settings.json` or a v7 `AppConfig.json` (v7 names are mapped; see
+[MIGRATION-FROM-V7.md](MIGRATION-FROM-V7.md)). Only values that differ from the shipped
+`settings.json` are copied, so later updates to the defaults still apply. Importing
+again merges into `settings.local.json`; the newer file wins.
+
+If a v7 `AppConfig.json` is in the `config` folder and there is no
+`settings.local.json` yet, it is imported automatically the first time the console starts.
+
+## Settings
 
 | Setting | Default | Meaning |
 |---|---|---|

@@ -8,7 +8,7 @@ Generated from the report plugins. Right-click rows in reports marked **User** o
 |---|---|---|---|
 | Accounts Expiring Soon | Accounts with an expiry date in the next N days (contractors, temps). | Expiring within (days) | User |
 | AD Computers | Active Directory computer inventory. |  | Computer |
-| AD Users | All Active Directory users. |  | User |
+| AD Users | All Active Directory users. Right-click a row > Change Manager to update the manager. |  | User |
 | Disabled Users | All disabled user accounts, with where they live and when they last changed. |  | User |
 | Disabled Users Still in Groups | Disabled accounts that still hold group memberships - leftovers from incomplete offboarding. |  | User |
 | Domain Controllers | All domain controllers with site, OS, GC/RODC status and FSMO roles. |  |  |
@@ -24,6 +24,7 @@ Generated from the report plugins. Right-click rows in reports marked **User** o
 | Recently Created AD Users |  | Created in the last (days) | User |
 | Risky Account Settings | Enabled users with settings attackers look for: no password required, Kerberos pre-auth off, reversible encryption, SPNs (Kerberoastable), unconstrained delegation. |  | User |
 | Stale Computers | Enabled computer accounts that have not logged on for N days - candidates for Decommission Computer. | No logon for (days) | Computer |
+| Users and Managers | Every enabled user with department, title and manager. Right-click a row > Change Manager to update it. | Only users with no manager, Department (blank = all) | User |
 | Users Who Never Logged On | Enabled accounts older than N days that have never logged on. | Created more than (days) ago | User |
 
 ## EntraID
