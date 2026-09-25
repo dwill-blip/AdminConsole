@@ -145,6 +145,11 @@ A `Row` action works on report rows. A report offers it by listing its name in
 }
 ```
 
+Add `Bulk = $true` to also offer *<action> - all N shown rows...* in the right-click
+menu. It runs the action on every row currently shown (after the text filter) that
+`AppliesTo` accepts, with one confirmation and one set of inputs, and each row is
+audited on its own. *Remove From Group* on the User Group Memberships report works this way.
+
 ### Adding a new directory service
 
 For example, Intune or a ticketing API: write the `Connect-*` function inside the

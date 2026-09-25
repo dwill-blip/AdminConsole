@@ -209,6 +209,49 @@ function Invoke-ConsoleWorkflow {
     $results
 }
 
+function Invoke-ConsoleBulkAction {
+    <#
+    .SYNOPSIS  Runs one Row action against many report rows, with one confirmation and
+               one set of inputs up front. Rows the action does not apply to are skipped.
+    .OUTPUTS    One result per applicable row. Wrap the call in @().
+    #>
+    param(
+        [Parameter(Mandatory)]$Action,
+        [Parameter(Mandatory)][object[]]$Targets,
+        [scriptblock]$GetInputs,
+        [scriptblock]$Confirm
+    )
+    $def = Resolve-ConsoleAction $Action
+    if (-not $def.Bulk) { throw "'$($def.Name)' cannot run on several rows at once." }
+    if (-not (Test-ConsolePermission $def.Permission)) {
+        Write-ConsoleAudit -Action $def.Name -Target "$(@($Targets).Count) row(s)" -Result 'Denied' -Details "Missing permission $($def.Permission)"
+        return New-ActionResult $def.Name "$(@($Targets).Count) row(s)" 'Denied' "You need the '$($def.Permission)' permission to run '$($def.Name)'."
+    }
+    $todo = @($Targets | Where-Object { $null -ne $_ -and (Test-ConsoleActionApplies $def $_) })
+    $label = "$($todo.Count) row(s)"
+    if (-not $todo.Count) { return New-ActionResult $def.Name $label 'NotApplicable' "'$($def.Name)' does not apply to any of the rows." }
+
+    $inputs = $null
+    if (@($def.Inputs).Count -and $GetInputs) {
+        $inputs = & $GetInputs $def $todo[0]
+        if ($null -eq $inputs) { return New-ActionResult $def.Name $label 'Cancelled' 'Cancelled.' }
+    }
+    if ($Confirm) {
+        $names = @($todo | ForEach-Object { Get-ConsoleTargetName $def $_ })
+        $list = ($names | Select-Object -First 25 | ForEach-Object { "  - $_" }) -join "`n"
+        if ($names.Count -gt 25) { $list += "`n  ... and $($names.Count - 25) more" }
+        if (-not (& $Confirm "Run '$($def.Name)' on $($todo.Count) row(s)?`n`n$list")) {
+            return New-ActionResult $def.Name $label 'Cancelled' 'Cancelled.'
+        }
+    }
+
+    Write-ConsoleAudit -Action $def.Name -Target $label -Result 'Started' -Details 'Bulk run from a report'
+    $results = foreach ($t in $todo) { Invoke-ConsoleAction -Action $def -Target $t -Inputs $inputs }
+    $summary = (@($results) | Group-Object Status | ForEach-Object { "$($_.Name)=$($_.Count)" }) -join ', '
+    Write-ConsoleAudit -Action $def.Name -Target $label -Result 'Completed' -Details $summary
+    $results
+}
+
 # ---------------------------------------------------------------- status checks
 #
 # An action may declare  Check = { param($Target) ... }  that looks (read-only) at

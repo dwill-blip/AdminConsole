@@ -1,6 +1,7 @@
 @{
     Name        = 'User Group Memberships'
-    Description = 'Every Microsoft 365 / Entra ID group one user belongs to. Filter by where the group lives (synced from AD or cloud only) and by kind (Microsoft 365, distribution, mail-enabled security, security).'
+    Description = 'Every Microsoft 365 / Entra ID group one user belongs to. Filter by where the group lives (synced from AD or cloud only) and by kind (Microsoft 365, distribution, mail-enabled security, security). Right-click a row > Remove From Group, for that group or for all shown rows.'
+    RowActions  = @('Remove From Group')
     GraphScopes = @('User.Read.All', 'GroupMember.Read.All')
     Parameters  = @(
         @{ Name = 'User'; Label = 'User (UPN, email or sAMAccountName)'; Required = $true }
@@ -15,17 +16,17 @@
         $who = "$($Params.User)".Trim()
         $user = $null
         if ($who -match '@|^[0-9a-fA-F-]{36}$') {
-            $user = Invoke-ConsoleGraph GET "v1.0/users/$([uri]::EscapeDataString($who))?`$select=id,userPrincipalName" -AllowNotFound
+            $user = Invoke-ConsoleGraph GET "v1.0/users/$([uri]::EscapeDataString($who))?`$select=id,userPrincipalName,onPremisesSamAccountName" -AllowNotFound
         }
         if (-not $user) {
             # Not a UPN or object ID: try the email address, then the on-premises logon name.
             $q = $who.Replace("'", "''")
             $f = [uri]::EscapeDataString("mail eq '$q' or proxyAddresses/any(p:p eq 'smtp:$q') or onPremisesSamAccountName eq '$q'")
-            $user = @(Invoke-ConsoleGraph GET "v1.0/users?`$filter=$f&`$select=id,userPrincipalName&`$count=true" -All -Headers @{ ConsistencyLevel = 'eventual' }) | Select-Object -First 1
+            $user = @(Invoke-ConsoleGraph GET "v1.0/users?`$filter=$f&`$select=id,userPrincipalName,onPremisesSamAccountName&`$count=true" -All -Headers @{ ConsistencyLevel = 'eventual' }) | Select-Object -First 1
         }
         if (-not $user) { throw "No Microsoft 365 user found for '$who'." }
 
-        $select = 'id,displayName,mail,description,groupTypes,mailEnabled,securityEnabled,onPremisesSyncEnabled,onPremisesLastSyncDateTime,membershipRule,resourceProvisioningOptions'
+        $select = 'id,displayName,mail,description,groupTypes,mailEnabled,securityEnabled,onPremisesSyncEnabled,onPremisesLastSyncDateTime,onPremisesSamAccountName,membershipRule,resourceProvisioningOptions'
         $direct = @(Invoke-ConsoleGraph GET "v1.0/users/$($user.id)/memberOf/microsoft.graph.group?`$select=$select&`$top=999" -All)
         $groups = $direct
         if ($Params.IncludeNested) {
@@ -57,6 +58,9 @@
                 Description = $g.description
                 User        = $user.userPrincipalName
                 Id          = $g.id
+                UserId      = $user.id
+                UserSamAccountName  = $user.onPremisesSamAccountName
+                GroupSamAccountName = $g.onPremisesSamAccountName
             }
         }
         $rows | Sort-Object Source, Type, Group

@@ -259,6 +259,12 @@ function Show-UiRowMenu {
         $label = $a.Name
         if (Test-ConsoleApprovalRequired $a) { $label += ' *' }
         [void]$menu.Items.Add((New-UiMenuItem -Text $label -Danger:$a.Danger -Disabled:(-not $ok) -State @{ Page = $Page; Kind = 'Row'; Item = $a; Row = $row }))
+        if ($a.Bulk) {
+            # Same action on every row currently shown (after the text filter).
+            $rows = @($Page.Shown | Where-Object { $null -ne $_ -and (Test-ConsoleActionApplies $a $_) })
+            $bulkOk = (Test-ConsolePermission $a.Permission) -and $rows.Count
+            [void]$menu.Items.Add((New-UiMenuItem -Text "$label - all $($rows.Count) shown row(s)..." -Danger:$a.Danger -Disabled:(-not $bulkOk) -State @{ Page = $Page; Kind = 'Bulk'; Item = $a; Rows = $rows }))
+        }
     }
     if ($def.RowType) {
         $key = [string]$row.($def.RowKey)
@@ -292,6 +298,13 @@ function Invoke-UiRowItem {
         'Row' {
             $r = Invoke-ConsoleAction -Action $State.Item -Target $State.Row -GetInputs $script:UiGetInputs -Confirm $script:UiConfirm
             Show-UiActionResult $r
+        }
+        'Bulk' {
+            $results = @(Invoke-ConsoleBulkAction -Action $State.Item -Targets $State.Rows -GetInputs $script:UiGetInputs -Confirm $script:UiConfirm)
+            if ($results.Count -eq 1 -and $results[0].Status -in 'Cancelled', 'Denied', 'NotApplicable') { Show-UiActionResult $results[0]; return }
+            $lines = foreach ($r in $results) { '{0,-14} {1}  {2}' -f $r.Status, $r.Target, ($r.Message -replace "`r?`n", ' ') }
+            $done = @($results | Where-Object { $_.Status -eq 'Success' }).Count
+            Show-UiText -Title "$($State.Item.Name): $done of $($results.Count) done - re-run the report to see the changes" -Text ($lines -join "`n")
         }
         'Resolved' {
             $target = Get-ConsoleRowTarget -Report $def -Row $State.Row

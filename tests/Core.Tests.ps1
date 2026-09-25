@@ -56,6 +56,10 @@ Describe 'AdminConsole core' {
         Write-Plugin 'actions/Test/RowThing.ps1' @'
 @{ Name = 'Row Thing'; Scope = 'Row'; TargetName = { param($R) "row-$($R.Id)" }; Run = { param($R) "row $($R.Id)" } }
 '@
+        Write-Plugin 'actions/Test/BulkRow.ps1' @'
+@{ Name = 'Bulk Row'; Scope = 'Row'; Bulk = $true; TargetName = { param($R) "row-$($R.Id)" }
+   AppliesTo = { param($R) $R.Id -ne 2 }; Run = { param($R) if ($R.Id -eq 3) { throw 'row 3 failed' }; "did $($R.Id)" } }
+'@
         Write-Plugin 'actions/Test/Checked.ps1' @'
 @{ Name = 'Checked'; Scope = 'User'; Check = { param($T) @{ Done = ($T.DisplayName -eq 'Done Dan'); Detail = "name=$($T.DisplayName)" } }; Run = { param($T) 'ok' } }
 '@
@@ -89,7 +93,7 @@ Describe 'AdminConsole core' {
 
     Context 'Plugins' {
         It 'loads valid plugins and skips templates' {
-            (Get-ConsoleAction).Count | Should -Be 9
+            (Get-ConsoleAction).Count | Should -Be 10
             Get-ConsoleAction -Name 'Ignored' | Should -BeNullOrEmpty
         }
         It 'reports broken plugins instead of crashing' {
@@ -172,6 +176,27 @@ Describe 'AdminConsole core' {
         }
         It 'names row targets with TargetName' {
             (Invoke-ConsoleAction -Action 'Row Thing' -Target ([pscustomobject]@{ Id = 7 })).Target | Should -Be 'row-7'
+        }
+    }
+
+    Context 'Bulk row actions' {
+        It 'confirms once, skips rows it does not apply to and reports each row' {
+            $script:asked = 0
+            $rows = 1..4 | ForEach-Object { [pscustomobject]@{ Id = $_ } }
+            $r = @(Invoke-ConsoleBulkAction -Action 'Bulk Row' -Targets $rows -Confirm { param($m) $script:asked++; $m | Should -Match '3 row\(s\)'; $true })
+            $script:asked | Should -Be 1
+            ($r | ForEach-Object { "$($_.Target)=$($_.Status)" }) -join ',' | Should -Be 'row-1=Success,row-3=Failed,row-4=Success'
+        }
+        It 'does nothing when the confirmation is declined' {
+            $r = @(Invoke-ConsoleBulkAction -Action 'Bulk Row' -Targets @([pscustomobject]@{ Id = 1 }) -Confirm { $false })
+            $r.Count | Should -Be 1
+            $r[0].Status | Should -Be 'Cancelled'
+        }
+        It 'refuses actions that are not marked Bulk' {
+            Get-ErrorText { Invoke-ConsoleBulkAction -Action 'Row Thing' -Targets @([pscustomobject]@{ Id = 1 }) } | Should -Match 'several rows'
+        }
+        It 'denies operators without the permission' {
+            Invoke-As 'CONTOSO\nobody' { (@(Invoke-ConsoleBulkAction -Action 'Bulk Row' -Targets @([pscustomobject]@{ Id = 1 })))[0].Status } | Should -Be 'Denied'
         }
     }
 

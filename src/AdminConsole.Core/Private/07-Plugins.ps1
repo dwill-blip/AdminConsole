@@ -79,6 +79,7 @@ function ConvertTo-ActionDefinition {
         RequiresApproval = [bool](Get-DefValue $Def 'RequiresApproval' $false)
         Confirm          = (Get-DefValue $Def 'Confirm' $true)
         Danger           = [bool](Get-DefValue $Def 'Danger' $false)
+        Bulk             = [bool](Get-DefValue $Def 'Bulk' $false)
         Order            = [int](Get-DefValue $Def 'Order' 100)
         Inputs           = ConvertTo-InputDefinitions (Get-DefValue $Def 'Inputs' @()) "Action '$($Def.Name)'"
         AppliesTo        = Get-DefValue $Def 'AppliesTo'

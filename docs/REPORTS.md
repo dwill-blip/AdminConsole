@@ -39,7 +39,7 @@ Generated from the report plugins. Right-click rows in reports marked **User** o
 | MFA Registration Status | Per-user MFA registration (needs Reports.Read.All / AuditLog.Read.All). |  | User |
 | Recently Created Microsoft 365 Users |  | Created in the last (days) | User |
 | Stale Entra Devices | Entra ID devices with no sign-in for N days. | No sign-in for (days) | Computer |
-| User Group Memberships | Every Microsoft 365 / Entra ID group one user belongs to. Filter by where the group lives (synced from AD or cloud only) and by kind (Microsoft 365, distribution, mail-enabled security, security). | User (UPN, email or sAMAccountName), Source, Group type, Include nested groups |  |
+| User Group Memberships | Every Microsoft 365 / Entra ID group one user belongs to. Filter by where the group lives (synced from AD or cloud only) and by kind (Microsoft 365, distribution, mail-enabled security, security). Right-click a row > Remove From Group, for that group or for all shown rows. | User (UPN, email or sAMAccountName), Source, Group type, Include nested groups |  |
 
 ## Exchange
 
