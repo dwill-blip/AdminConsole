@@ -35,3 +35,35 @@ function Register-ConsoleFileLog {
         Add-Content -Path $file -Value $Line -Encoding UTF8
     }
 }
+
+# ------------------------------------------------------------------ progress
+# Long-running plugins call Write-ConsoleProgress once per item. The GUI registers a
+# sink that shows a progress window with Cancel (and keeps the window responsive);
+# a sink may throw to cancel the operation. Without a sink this does nothing.
+
+$script:ProgressSinks = New-Object System.Collections.ArrayList
+$script:ProgressLast  = [datetime]::MinValue
+
+function Register-ConsoleProgressSink {
+    param([Parameter(Mandatory)][scriptblock]$Sink)
+    [void]$script:ProgressSinks.Add($Sink)
+}
+
+function Clear-ConsoleProgressSinks { $script:ProgressSinks.Clear() }
+
+function Write-ConsoleProgress {
+    <#
+    .SYNOPSIS  Reports progress: Write-ConsoleProgress 'Reading mailboxes' $i $boxes.Count
+    #>
+    param(
+        [Parameter(Mandatory)][string]$Activity,
+        [int]$Done = 0,
+        [int]$Total = 0
+    )
+    if (-not $script:ProgressSinks.Count) { return }
+    # At most five updates a second; they repaint the window.
+    $now = [datetime]::UtcNow
+    if (($now - $script:ProgressLast).TotalMilliseconds -lt 200) { return }
+    $script:ProgressLast = $now
+    foreach ($sink in @($script:ProgressSinks)) { & $sink $Activity $Done $Total }
+}

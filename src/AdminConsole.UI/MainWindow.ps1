@@ -94,11 +94,14 @@ function Show-AdminConsoleWindow {
         if ($script:UiLogBox -and -not $script:UiLogBox.IsDisposed) { $script:UiLogBox.AppendText($Line + "`r`n") }
     }
 
+    Register-ConsoleProgressSink { param($Activity, $Done, $Total) Update-UiProgress $Activity $Done $Total }
+
     Initialize-UiPages
     Write-ConsoleLog "Ready. Signed in as $user ($roles)."
     foreach ($e in @(Get-ConsolePluginErrors)) { Write-ConsoleLog "Plugin error in $($e.File): $($e.Error)" Warning }
 
     [void]$form.ShowDialog()
     Clear-ConsoleLogSinks
+    Clear-ConsoleProgressSinks
     $form.Dispose()
 }

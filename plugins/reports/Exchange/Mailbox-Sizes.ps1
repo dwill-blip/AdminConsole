@@ -9,7 +9,12 @@
         Connect-ConsoleExchange
         $p = @{ ResultSize = 'Unlimited'; Properties = 'ProhibitSendQuota' }
         if ($Params.Type -ne 'All') { $p.RecipientTypeDetails = $Params.Type }
-        foreach ($mb in @(Get-EXOMailbox @p)) {
+        Write-ConsoleProgress 'Listing mailboxes...'
+        $boxes = @(Get-EXOMailbox @p)
+        $i = 0
+        foreach ($mb in $boxes) {
+            $i++
+            Write-ConsoleProgress "Reading mailbox sizes: $($mb.DisplayName)" $i $boxes.Count
             $s = Get-EXOMailboxStatistics -Identity $mb.ExternalDirectoryObjectId -ErrorAction SilentlyContinue
             $bytes = ConvertTo-ConsoleBytes $s.TotalItemSize
             $quota = ConvertTo-ConsoleBytes $mb.ProhibitSendQuota

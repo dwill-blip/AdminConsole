@@ -61,6 +61,10 @@ An action is one operation on one target.
 - Anything you output (strings are best) is shown in the success message.
 - Settings are available through `Get-ConsoleSetting 'Name'` and paths through
   `Resolve-ConsolePath 'output/x'`.
+- **Long loops** (one remote call per mailbox, user, ...) should call
+  `Write-ConsoleProgress "Reading $($x.Name)" $i $items.Count` once per item. The GUI
+  then shows a progress window with **Cancel** and stays responsive instead of
+  "Not Responding". Cancel makes that call throw, which stops the plugin. Headless jobs ignore it.
 
 ### What the engine does for you
 

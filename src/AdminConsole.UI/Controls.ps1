@@ -28,13 +28,84 @@ function Invoke-UiEvent {
         & $entry.Handler $entry.State $Sender $EventArgs
     }
     catch {
-        Write-ConsoleLog $_.Exception.Message Error
-        Show-UiError $_.Exception.Message
+        if ($_.Exception.Message -eq 'Cancelled by the operator.') { Write-ConsoleLog 'Cancelled.' Warning }
+        else {
+            Write-ConsoleLog $_.Exception.Message Error
+            Show-UiError $_.Exception.Message
+        }
     }
     finally {
+        Close-UiProgress
         [System.Windows.Forms.Cursor]::Current = [System.Windows.Forms.Cursors]::Default
         Set-UiStatus 'Ready'
     }
+}
+
+# Progress window for long operations (fed by Write-ConsoleProgress). While it is up the
+# main window is disabled, so pumping messages here cannot re-enter a click handler;
+# only its Cancel button can be used. Cancel makes the next progress update throw.
+$script:UiProgress = $null
+
+function Update-UiProgress {
+    param([string]$Activity, [int]$Done, [int]$Total)
+    if (-not $script:UiForm -or $script:UiForm.IsDisposed -or -not $script:UiForm.Visible) { return }
+    if (-not $script:UiProgress) {
+        $dlg = New-Object System.Windows.Forms.Form
+        $dlg.Text = 'Working...'
+        $dlg.Font = $script:UiFont
+        $dlg.FormBorderStyle = 'FixedDialog'
+        $dlg.ControlBox = $false
+        $dlg.ShowInTaskbar = $false
+        $dlg.StartPosition = 'CenterParent'
+        $dlg.AutoSize = $true
+        $dlg.AutoSizeMode = 'GrowAndShrink'
+        $dlg.Padding = New-Object System.Windows.Forms.Padding(12)
+        $table = New-Object System.Windows.Forms.TableLayoutPanel
+        $table.AutoSize = $true
+        $table.ColumnCount = 1
+        $label = New-UiLabel ''
+        $label.AutoSize = $false
+        $label.Width = 420
+        $label.Height = 40
+        $bar = New-Object System.Windows.Forms.ProgressBar
+        $bar.Width = 420
+        $cancel = New-Object System.Windows.Forms.Button
+        $cancel.Text = 'Cancel'
+        $cancel.AutoSize = $true
+        $cancel.Anchor = 'Right'
+        $cancel.Add_Click({ if ($script:UiProgress) { $script:UiProgress.Cancelled = $true; $script:UiProgress.Label.Text = 'Cancelling...' } })
+        $table.Controls.Add($label)
+        $table.Controls.Add($bar)
+        $table.Controls.Add($cancel)
+        $dlg.Controls.Add($table)
+        $script:UiProgress = @{ Form = $dlg; Label = $label; Bar = $bar; Cancelled = $false }
+        $script:UiForm.Enabled = $false
+        $dlg.Show($script:UiForm)
+    }
+    $p = $script:UiProgress
+    if (-not $p.Cancelled) {
+        if ($Total -gt 0) {
+            $p.Bar.Style = 'Continuous'
+            $p.Bar.Maximum = $Total
+            $p.Bar.Value = [math]::Max(0, [math]::Min($Done, $Total))
+            $p.Label.Text = "$Activity`n$Done of $Total"
+        }
+        else {
+            $p.Bar.Style = 'Marquee'
+            $p.Label.Text = $Activity
+        }
+    }
+    [System.Windows.Forms.Application]::DoEvents()
+    if ($p.Cancelled) { throw 'Cancelled by the operator.' }
+}
+
+function Close-UiProgress {
+    if (-not $script:UiProgress) { return }
+    $p = $script:UiProgress
+    $script:UiProgress = $null
+    if ($script:UiForm -and -not $script:UiForm.IsDisposed) { $script:UiForm.Enabled = $true }
+    if (-not $p.Form.IsDisposed) { $p.Form.Close(); $p.Form.Dispose() }
+    if ($script:UiForm -and -not $script:UiForm.IsDisposed) { [void]$script:UiForm.Activate() }
 }
 
 function Set-UiStatus {

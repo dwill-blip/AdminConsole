@@ -49,7 +49,7 @@ Generated from the report plugins. Right-click rows in reports marked **User** o
 | Distribution Groups | Distribution lists, owners, and whether outside senders can mail them. |  |  |
 | Inactive Mailboxes | Mailboxes kept after the user was deleted (litigation hold / retention). |  |  |
 | Mailbox Forwarding | Mailboxes that forward mail - a common sign of compromise. |  | User |
-| Mailbox Permissions | Full Access and Send As permissions granted to other people. Leave Mailbox blank for all mailboxes (slow in big tenants). | Mailbox (blank = all) |  |
+| Mailbox Permissions | Full Access and Send As permissions granted to other people. Leave Mailbox blank for all mailboxes: Full Access is read one mailbox at a time, so that takes a while in big tenants (a progress window with Cancel is shown). | Mailbox (blank = all), Mailbox type, Permission |  |
 | Mailbox Sizes | Size and item count of every mailbox, largest first. Can take several minutes in big tenants. | Mailbox type | User |
 | Out of Office Enabled | User mailboxes with automatic replies on or scheduled. Slow in big tenants. |  | User |
 | Shared Mailboxes | Every shared mailbox, and whether its sign-in is blocked (it should be). |  |  |

@@ -392,6 +392,19 @@ Describe 'AdminConsole core' {
             }
             finally { Remove-Item $local -ErrorAction SilentlyContinue; Initialize-ConsoleConfig -Root $script:root }
         }
+        It 'sends progress to sinks, throttled, and lets a sink cancel' {
+            $script:seen = @()
+            Register-ConsoleProgressSink { param($a, $d, $t) $script:seen += "$a $d/$t"; if ($a -eq 'stop') { throw 'Cancelled by the operator.' } }
+            try {
+                Start-Sleep -Milliseconds 250
+                Write-ConsoleProgress 'first' 1 10
+                Write-ConsoleProgress 'too soon' 2 10
+                $script:seen -join ',' | Should -Be 'first 1/10'
+                Start-Sleep -Milliseconds 250
+                { Write-ConsoleProgress 'stop' 3 10 } | Should -Throw 'Cancelled by the operator.'
+            }
+            finally { Clear-ConsoleProgressSinks }
+        }
         It 'produces health rows' {
             $rows = Invoke-ConsoleHealthCheck
             ($rows | Where-Object { $_.Component -eq 'Database' }).Status | Should -Be 'Healthy'

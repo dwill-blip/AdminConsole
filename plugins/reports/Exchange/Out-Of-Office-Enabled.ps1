@@ -6,7 +6,12 @@
     Run         = {
         param($Params)
         Connect-ConsoleExchange
-        foreach ($mb in @(Get-EXOMailbox -RecipientTypeDetails UserMailbox, SharedMailbox -ResultSize Unlimited)) {
+        Write-ConsoleProgress 'Listing mailboxes...'
+        $boxes = @(Get-EXOMailbox -RecipientTypeDetails UserMailbox, SharedMailbox -ResultSize Unlimited)
+        $i = 0
+        foreach ($mb in $boxes) {
+            $i++
+            Write-ConsoleProgress "Reading automatic replies: $($mb.DisplayName)" $i $boxes.Count
             $c = Get-MailboxAutoReplyConfiguration -Identity $mb.ExternalDirectoryObjectId -ErrorAction SilentlyContinue
             if ($c -and "$($c.AutoReplyState)" -ne 'Disabled') {
                 [pscustomobject]@{
