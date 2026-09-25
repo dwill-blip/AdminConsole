@@ -1,9 +1,11 @@
-# Configuration: loads config\settings.json, merges it over built-in defaults,
-# and exposes values through Get-ConsoleSetting 'Dotted.Path'.
+# Configuration: loads config\settings.json, then config\settings.local.json (your
+# site's values, not in git), merges both over built-in defaults, and exposes values
+# through Get-ConsoleSetting 'Dotted.Path'.
 
-$script:ConsoleRoot  = $null
-$script:SettingsPath = $null
-$script:Settings     = $null
+$script:ConsoleRoot       = $null
+$script:SettingsPath      = $null
+$script:LocalSettingsPath = $null
+$script:Settings          = $null
 
 function Get-ConsoleDefaultSettings {
     @{
@@ -62,6 +64,14 @@ function Merge-ConsoleHashtable {
     $result
 }
 
+function Read-ConsoleSettingsFile {
+    param([Parameter(Mandatory)][string]$Path)
+    if (-not (Test-Path $Path)) { return @{} }
+    $raw = Get-Content -Path $Path -Raw
+    if (-not $raw -or -not $raw.Trim()) { return @{} }
+    ConvertTo-ConsoleHashtable ($raw | ConvertFrom-Json)
+}
+
 function Initialize-ConsoleConfig {
     param(
         [Parameter(Mandatory)][string]$Root,
@@ -70,13 +80,88 @@ function Initialize-ConsoleConfig {
     $script:ConsoleRoot = (Resolve-Path $Root).Path
     if (-not $SettingsPath) { $SettingsPath = Join-Path (Join-Path $script:ConsoleRoot 'config') 'settings.json' }
     $script:SettingsPath = $SettingsPath
+    $script:LocalSettingsPath = Join-Path (Split-Path -Parent $SettingsPath) 'settings.local.json'
 
-    $fromFile = @{}
-    if (Test-Path $SettingsPath) {
-        $raw = Get-Content -Path $SettingsPath -Raw
-        if ($raw.Trim()) { $fromFile = ConvertTo-ConsoleHashtable ($raw | ConvertFrom-Json) }
+    # First start after upgrading from v7: pick up the old Config\AppConfig.json once.
+    if (-not (Test-Path $script:LocalSettingsPath)) {
+        $legacy = foreach ($dir in 'config', 'Config') {
+            $candidate = Join-Path (Join-Path $script:ConsoleRoot $dir) 'AppConfig.json'
+            if (Test-Path $candidate) { $candidate; break }
+        }
+        if ($legacy) { $null = Import-ConsoleSettingsFile -Path $legacy -NoReload }
     }
-    $script:Settings = Merge-ConsoleHashtable (Get-ConsoleDefaultSettings) $fromFile
+
+    $merged = Merge-ConsoleHashtable (Get-ConsoleDefaultSettings) (Read-ConsoleSettingsFile $SettingsPath)
+    $script:Settings = Merge-ConsoleHashtable $merged (Read-ConsoleSettingsFile $script:LocalSettingsPath)
+}
+
+function ConvertFrom-ConsoleV7Settings {
+    # Maps a v7 Config\AppConfig.json onto v8 names (see docs\MIGRATION-FROM-V7.md).
+    # Anything that is not a v7 file is returned unchanged.
+    param([Parameter(Mandatory)][hashtable]$Settings)
+    $v7Keys = 'Version', 'SeedDatabase', 'NotificationDropFolder', 'ScheduledReportOutputFolder'
+    if (-not @($v7Keys | Where-Object { $Settings.ContainsKey($_) })) { return $Settings }
+
+    $out = @{}
+    foreach ($k in $Settings.Keys) { $out[$k] = $Settings[$k] }
+    # v8 uses a new database; the v7 one is not reused.
+    foreach ($k in 'Version', 'SeedDatabase', 'DatabasePath') { $out.Remove($k) }
+    if ($out.ContainsKey('NotificationDropFolder')) {
+        $out['Notifications'] = @{ DropFolder = $out['NotificationDropFolder'] }
+        $out.Remove('NotificationDropFolder')
+    }
+    if ($out.ContainsKey('ScheduledReportOutputFolder')) {
+        $out['ReportOutputFolder'] = $out['ScheduledReportOutputFolder']
+        $out.Remove('ScheduledReportOutputFolder')
+    }
+    $out
+}
+
+function Get-ConsoleSettingsDifference {
+    # The parts of $Settings whose values differ from $Baseline (nested hashtables are
+    # compared key by key; other values by their JSON form).
+    param([hashtable]$Settings, [hashtable]$Baseline)
+    $diff = @{}
+    foreach ($k in $Settings.Keys) {
+        $value = $Settings[$k]
+        $base = if ($Baseline -and $Baseline.ContainsKey($k)) { $Baseline[$k] } else { $null }
+        if ($value -is [hashtable] -and $base -is [hashtable]) {
+            $sub = Get-ConsoleSettingsDifference $value $base
+            if ($sub.Count) { $diff[$k] = $sub }
+        }
+        elseif ($null -eq $base -or (ConvertTo-Json @(, $value) -Depth 6 -Compress) -ne (ConvertTo-Json @(, $base) -Depth 6 -Compress)) {
+            $diff[$k] = $value
+        }
+    }
+    $diff
+}
+
+function Import-ConsoleSettingsFile {
+    <#
+    .SYNOPSIS  Copies your values from an earlier settings file (a v8 settings.json or a
+               v7 AppConfig.json) into config\settings.local.json. Values that match
+               the shipped config\settings.json are skipped, so later updates to it
+               still apply.
+    .OUTPUTS   The names of the settings that were imported.
+    #>
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [switch]$NoReload
+    )
+    if (-not $script:LocalSettingsPath) { throw 'Call Initialize-ConsoleConfig first.' }
+    if (-not (Test-Path $Path)) { throw "Settings file not found: $Path" }
+    $source = (Resolve-Path $Path).Path
+    if ($source -eq (Resolve-Path $script:LocalSettingsPath -ErrorAction SilentlyContinue).Path) {
+        throw 'That is already the local settings file.'
+    }
+
+    $shipped = Merge-ConsoleHashtable (Get-ConsoleDefaultSettings) (Read-ConsoleSettingsFile $script:SettingsPath)
+    $imported = Get-ConsoleSettingsDifference (ConvertFrom-ConsoleV7Settings (Read-ConsoleSettingsFile $source)) $shipped
+    $local = Merge-ConsoleHashtable (Read-ConsoleSettingsFile $script:LocalSettingsPath) $imported
+    $local | ConvertTo-Json -Depth 6 | Set-Content -Path $script:LocalSettingsPath -Encoding UTF8
+    if (-not $NoReload) { Initialize-ConsoleConfig -Root $script:ConsoleRoot -SettingsPath $script:SettingsPath }
+    Write-ConsoleLog -Message "Imported settings from $source into $($script:LocalSettingsPath)"
+    @($imported.Keys | Sort-Object)
 }
 
 function Get-ConsoleRoot { $script:ConsoleRoot }
@@ -110,7 +195,11 @@ function Set-ConsoleSetting {
 }
 
 function Get-ConsoleSettingsJson {
-    if ($script:SettingsPath -and (Test-Path $script:SettingsPath)) { return Get-Content $script:SettingsPath -Raw }
+    # The Settings tab edits settings.local.json, so your values survive updates to
+    # settings.json. Until that file exists it starts from settings.json.
+    foreach ($path in $script:LocalSettingsPath, $script:SettingsPath) {
+        if ($path -and (Test-Path $path)) { return Get-Content $path -Raw }
+    }
     $script:Settings | ConvertTo-Json -Depth 6
 }
 
@@ -118,9 +207,9 @@ function Save-ConsoleSettingsJson {
     param([Parameter(Mandatory)][string]$Json)
     Assert-ConsolePermission 'ManageSettings'
     $null = $Json | ConvertFrom-Json   # throws on invalid JSON before anything is written
-    Set-Content -Path $script:SettingsPath -Value $Json -Encoding UTF8
+    Set-Content -Path $script:LocalSettingsPath -Value $Json -Encoding UTF8
     Initialize-ConsoleConfig -Root $script:ConsoleRoot -SettingsPath $script:SettingsPath
-    Write-ConsoleAudit -Action 'Save Settings' -Target 'settings.json' -Result 'Success'
+    Write-ConsoleAudit -Action 'Save Settings' -Target 'settings.local.json' -Result 'Success'
 }
 
 function Resolve-ConsolePath {

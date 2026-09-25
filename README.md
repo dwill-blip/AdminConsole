@@ -21,8 +21,12 @@ not the language. v8 keeps PowerShell and fixes the structure.
 
 1. From an **elevated** Windows PowerShell: `.\Install-Prerequisites.ps1`
    (use `-Skip ActiveDirectory` on cloud-only tenants).
-2. Edit `config\settings.json` - at least `DisabledUsersOU` / `DisabledComputersOU`,
-   and set `Sources` to match what you have. See [docs/SETTINGS.md](docs/SETTINGS.md).
+2. Put your site's values in `config\settings.local.json` - at least `DisabledUsersOU` /
+   `DisabledComputersOU`, and set `Sources` to match what you have. Use the **Settings**
+   tab, or bring them over from an earlier install with
+   `.\Import-Settings.ps1 -Path <old settings.json or v7 AppConfig.json>`.
+   `settings.local.json` is not in git or the release zips, so updates never overwrite it.
+   See [docs/SETTINGS.md](docs/SETTINGS.md).
 3. Double-click `Start-AdminConsole.cmd`.
    The first person to open it becomes **GlobalAdmin**; add everyone else on the
    **Access** tab.
@@ -54,7 +58,9 @@ enabled account) or you lack the permission. `*` marks actions that need approva
 AdminConsole.ps1             GUI entry point  (Start-AdminConsole.cmd runs it)
 Invoke-AdminJobs.ps1         Headless jobs for Task Scheduler (-Register to install)
 Install-Prerequisites.ps1
-config/settings.json
+Import-Settings.ps1          Copy your values from an earlier settings file
+config/settings.json         Shipped defaults (updated with each release)
+config/settings.local.json   Your site's values (not in git; overrides settings.json)
 database/migrations/         NNN_name.sql, applied once each, in order
 plugins/
   actions/<folder>/*.ps1     one file = one button

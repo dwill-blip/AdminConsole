@@ -318,6 +318,55 @@ Describe 'AdminConsole core' {
             { Save-ConsoleSettingsJson -Json '{ not json' } | Should -Throw
             Get-ConsoleSetting 'ApprovalExpiryHours' | Should -Be 1
         }
+        It 'imports only changed values from an earlier settings.json into settings.local.json' {
+            $config = Join-Path $script:root 'config'
+            $local = Join-Path $config 'settings.local.json'
+            $old = Join-Path $TestDrive 'old-settings.json'
+            '{ "ApprovalExpiryHours": 1, "DisabledUsersOU": "OU=Gone,DC=acme,DC=local",
+               "Graph": { "TenantId": "acme.onmicrosoft.com", "ClientId": "" } }' | Set-Content $old
+            try {
+                $names = Import-ConsoleSettingsFile -Path $old
+                @($names) -join ',' | Should -Be 'DisabledUsersOU,Graph'
+                $saved = Get-Content $local -Raw | ConvertFrom-Json
+                $saved.PSObject.Properties.Name -contains 'ApprovalExpiryHours' | Should -Be $false
+                $saved.Graph.PSObject.Properties.Name -join ',' | Should -Be 'TenantId'
+                Get-ConsoleSetting 'DisabledUsersOU' | Should -Be 'OU=Gone,DC=acme,DC=local'
+                Get-ConsoleSetting 'Graph.TenantId' | Should -Be 'acme.onmicrosoft.com'
+                Get-ConsoleSetting 'Notifications.DropFolder' | Should -Be 'out/notes'
+            }
+            finally { Remove-Item $local -ErrorAction SilentlyContinue; Initialize-ConsoleConfig -Root $script:root }
+        }
+        It 'maps a v7 AppConfig.json and picks it up automatically on first start' {
+            $config = Join-Path $script:root 'config'
+            $local = Join-Path $config 'settings.local.json'
+            $legacy = Join-Path $config 'AppConfig.json'
+            '{ "Version": "7.2.1", "DisabledUsersOU": "OU=Old,DC=acme,DC=local", "DatabasePath": "Data\\HybridAdmin.db",
+               "SeedDatabase": true, "NotificationDropFolder": "Notes", "ScheduledReportOutputFolder": "Sched" }' | Set-Content $legacy
+            try {
+                Initialize-ConsoleConfig -Root $script:root
+                Test-Path $local | Should -Be $true
+                Get-ConsoleSetting 'DisabledUsersOU' | Should -Be 'OU=Old,DC=acme,DC=local'
+                Get-ConsoleSetting 'Notifications.DropFolder' | Should -Be 'Notes'
+                Get-ConsoleSetting 'Notifications.WebhookUrl' 'none' | Should -Be 'none'
+                Get-ConsoleSetting 'ReportOutputFolder' | Should -Be 'Sched'
+                Get-ConsoleSetting 'DatabasePath' | Should -Be 'data/AdminConsole.db'
+                Get-ConsoleSetting 'Version' | Should -BeNullOrEmpty
+            }
+            finally { Remove-Item $local, $legacy -ErrorAction SilentlyContinue; Initialize-ConsoleConfig -Root $script:root }
+        }
+        It 'saves the Settings tab to settings.local.json and leaves settings.json alone' {
+            $config = Join-Path $script:root 'config'
+            $local = Join-Path $config 'settings.local.json'
+            $before = Get-Content (Join-Path $config 'settings.json') -Raw
+            try {
+                Save-ConsoleSettingsJson -Json '{ "ApprovalExpiryHours": 5 }'
+                Get-ConsoleSetting 'ApprovalExpiryHours' | Should -Be 5
+                Get-ConsoleSetting 'RequireApprovals' | Should -Be $true
+                Get-Content (Join-Path $config 'settings.json') -Raw | Should -Be $before
+                Get-ConsoleSettingsJson | Should -Match '"ApprovalExpiryHours": 5'
+            }
+            finally { Remove-Item $local -ErrorAction SilentlyContinue; Initialize-ConsoleConfig -Root $script:root }
+        }
         It 'produces health rows' {
             $rows = Invoke-ConsoleHealthCheck
             ($rows | Where-Object { $_.Component -eq 'Database' }).Status | Should -Be 'Healthy'

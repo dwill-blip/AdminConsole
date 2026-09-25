@@ -3,3 +3,4 @@ logs/
 output/
 *.db
 *.db-journal
+config/settings.local.json
